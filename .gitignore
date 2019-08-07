@@ -1,7 +1,6 @@
-logs/
 js/token.js
-python/Hamburg/logs/
-python/Hamburg/data/gtfsfeed_text
-python/Hamburg/data/gtfsfeed_zips
-python/Boston/data/gtfsfeed_text
-python/Boston/data/gtfsfeed_zips
+*.csv
+**/gtfsfeed_text/
+**/gtfsfeed_zips/
+**/logs/
+*.hdf5
