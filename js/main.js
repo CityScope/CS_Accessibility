@@ -4,15 +4,15 @@ mapboxgl.accessToken = MAPBOX_TOKEN;
 map = new mapboxgl.Map({
       container: 'map', // container id
       style: 'mapbox://styles/mapbox/dark-v9',
-      // center: [ -71.100769, 42.373715], // starting position [lng, lat]
-      center: [0,0],
-      zoom: 5 ,// starting zoom
+      center: [ 10, 42.5], // starting position [lng, lat]
+      // center: [0,0],
+      zoom: 8 ,// starting zoom
       pitch: 0
   }); 
 
 map.on('load', function(){ 
   // d3.json("./python/Boston/output_geojson.geojson", function(data) {
-    d3.json("./output_grid_geojson_Ham.geojson", function(data) {
+    d3.json("https://cityio.media.mit.edu/api/table/grasbrook/access", function(data) {
     console.log(data);
     makeMap(data);
   });
