@@ -13,11 +13,8 @@ import json
 import urllib
 import requests
 import numpy as np
-import os,sys
 from scipy import spatial
-# add the parent directory to path
-sys.path.insert(0,os.path.abspath(os.path.join('./', os.pardir)))
-from grid_geojson.grid_geojson import *
+import pyproj
 
 city='Hamburg'
 lng_min, lat_min, lng_max, lat_max = 9.965, 53.509, 10.05, 53.55
@@ -29,43 +26,64 @@ table_name_map={'Boston':"mocho",
 host='https://cityio.media.mit.edu/'
 
 lu_types_to_amenities={0: 'education', 1: 'groceries', 2:'food', 3: 'nightlife',
-                       4: 'food', 5: 'food'}
-RADIUS=15
+                       4: 'food'}
+RADIUS=20
 
 CITYIO_SAMPLE_PATH='./python/Hamburg/data/sample_cityio_data.json'
 NODES_PATH='./python/Hamburg/data/comb_network_nodes.csv'
 EDGES_PATH='./python/Hamburg/data/comb_network_edges.csv'
-#EDGES_ACCESS_AREA_PATH='./python/Hamburg/data/access_area_edges.csv'
-#NODES_ACCESS_AREA_PATH='./python/Hamburg/data/access_area_nodes.csv'
+GRID_INT_SAMPLE_PATH='./python/Hamburg/data/grid_interactive.geojson'
+GRID_FULL_SAMPLE_PATH='./python/Hamburg/data/grid_full.geojson'
+
+local_epsg = '31468'
+projection=pyproj.Proj("+init=EPSG:"+local_epsg)
+wgs=pyproj.Proj("+init=EPSG:4326")
+
 cityIO_grid_url=host+'api/table/'+table_name_map[city]
 cityIO_output_path=host+'api/table/update/'+table_name_map[city]+'/'
 access_output_path=cityIO_output_path+'access'
 
+walk_speed_met_min=5*1000/60
+
+
 # =============================================================================
 # Functions
 def get_osm_amenies(bounds, tags):
+    """
+    takes a list representing the bounds of the area of interest and
+    a dictionary defining tag categories and the Oassociated OSM tags 
+    Returns a list of amenities with their tag categories
+    """
     str_bounds=str(bounds[0])+','+str(bounds[1])+','+str(bounds[2])+','+str(bounds[3])
     osm_url_bbox=OSM_URL_ROOT+str_bounds
     with urllib.request.urlopen(osm_url_bbox) as url:
         data=json.loads(url.read().decode())
-    amenities={t:{'x': [], 'y': []} for t in tags}
+    amenities={t:{'lon': [], 'lat': [], 'x':[], 'y': []} for t in tags}
     for a in range(len(data['elements'])):
         for t in tags:
             for recordTag in list(data['elements'][a]['tags'].items()):
                 if recordTag[0] +'_'+recordTag[1] in tags[t]:
-                    amenities[t]['x'].append(data['elements'][a]['lon'])
-                    amenities[t]['y'].append(data['elements'][a]['lat'])
+                    lon, lat=data['elements'][a]['lon'], data['elements'][a]['lat']
+                    x,y=pyproj.transform(wgs, projection,lon, lat)
+                    amenities[t]['lon'].append(lon)
+                    amenities[t]['lat'].append(lat)
+                    amenities[t]['x'].append(x)
+                    amenities[t]['y'].append(y)
     return amenities
         
-def create_access_geojson(xs, ys, grids): 
-    scalers={t: max([grids[i][t] for i in range(len(grids))]) for t in base_amenities}   
+def create_access_geojson(xs, ys, grids, scalers):
+    """
+    takes lists of x and y coordinates and a list containing the accessibility 
+    score for each point and tag category
+    """
+       
     output_geojson={
      "type": "FeatureCollection",
      "features": []
     }    
     for i in range(len(xs)):
         geom={"type": "Point","coordinates": [xs[i],ys[i]]}
-        props={t: grids[i][t]/scalers[t] for t in base_amenities}
+        props={t: np.power(grids[i][t]/scalers[t], 2) for t in base_amenities}
         feat={
          "type": "Feature",
          "properties": props,
@@ -73,10 +91,41 @@ def create_access_geojson(xs, ys, grids):
         }
         output_geojson["features"].append(feat) 
     return output_geojson
+
+def createGridGraphs(grid_coords_xy, graph, nrows, ncols, cell_size, kd_tree_nodes):
+    """
+    returns new networks including roads around the cells
+    """
+#    create graph internal to the grid
+    graph.add_nodes_from('g'+str(n) for n in range(len(grid_coords_xy)))
+    for c in range(ncols):
+        for r in range(nrows):
+            # if not at the end of a row, add h link
+            if not c==ncols-1:
+                graph.add_edge('g'+str(r*ncols+c), 'g'+str(r*ncols+c+1), 
+                      attr_dict={'weight_minutes':cell_size/walk_speed_met_min})
+                graph.add_edge('g'+str(r*ncols+c+1), 'g'+str(r*ncols+c), 
+                      attr_dict={'weight_minutes':cell_size/walk_speed_met_min})
+            # if not at the end of a column, add v link
+            if not r==nrows-1:
+                graph.add_edge('g'+str(r*ncols+c), 'g'+str((r+1)*ncols+c), 
+                      attr_dict={'weight_minutes':cell_size/walk_speed_met_min})
+                graph.add_edge('g'+str((r+1)*ncols+c), 'g'+str(r*ncols+c), 
+                      attr_dict={'weight_minutes':cell_size/walk_speed_met_min})
+    # create links between the 4 corners of the grid and the road network
+    for n in [0, ncols-1, (nrows-1)*ncols, (nrows*ncols)-1]: 
+        dist_to_closest, closest_ind=kd_tree_nodes.query(grid_coords_xy[n], k=1)
+        closest_node_id=nodes.iloc[closest_ind]['id_int']
+        graph.add_edge('g'+str(n), closest_node_id, attr_dict={ 
+                   'weight_minutes':dist_to_closest/walk_speed_met_min})
+        graph.add_edge(closest_node_id, 'g'+str(n), attr_dict={
+                   'weight_minutes':dist_to_closest/walk_speed_met_min})
+    return graph 
 # =============================================================================
 
 # =============================================================================
-# Get cityIO data
+# Get the grid data
+# Interactive grid parameters
 try:
     with urllib.request.urlopen(cityIO_grid_url+'/header/spatial') as url:
     #get the latest grid data
@@ -85,13 +134,31 @@ except:
     print('Using static cityIO grid file')
     cityIO_data=json.load(open(CITYIO_SAMPLE_PATH))
     cityIO_spatial_data=cityIO_data['header']['spatial']
-    
-grid=Grid(cityIO_spatial_data['longitude'], cityIO_spatial_data['latitude'], 
-          cityIO_spatial_data['rotation'],  cityIO_spatial_data['cellSize'], 
-          cityIO_spatial_data['nrows'], cityIO_spatial_data['ncols'])
 
-grid_points=grid.all_cells_top_left
-grid_points_ll = [[g['lon'] , g['lat']] for g in grid_points]
+# Interactive grid geojson    
+try:
+    with urllib.request.urlopen(cityIO_grid_url+'/grid_interactive_area') as url:
+    #get the latest grid data
+        grid_interactive=json.loads(url.read().decode())
+except:
+    print('Using static cityIO grid file')
+    grid_interactive=json.load(open(GRID_INT_SAMPLE_PATH))
+    
+# Full table grid geojson      
+try:
+    with urllib.request.urlopen(cityIO_grid_url+'/grid_full_table') as url:
+    #get the latest grid data
+        grid_full_table=json.loads(url.read().decode())
+except:
+    print('Using static cityIO grid file')
+    grid_full_table=json.load(open(GRID_FULL_SAMPLE_PATH))
+    
+
+grid_points_ll=[f['geometry']['coordinates'][0][0] for f in grid_interactive['features']]
+grid_points_x, grid_points_y=pyproj.transform(wgs, projection,
+                                              [grid_points_ll[p][0] for p in range(len(grid_points_ll))], 
+                                              [grid_points_ll[p][1] for p in range(len(grid_points_ll))])
+grid_points_xy=[[grid_points_x[i], grid_points_y[i]] for i in range(len(grid_points_x))]
 # =============================================================================
 
 # =============================================================================
@@ -110,61 +177,100 @@ base_amenities=get_osm_amenies(bounds_all, tags)
 # =============================================================================
 
 # =============================================================================
-# Get network
+# Create the transport network
+# Baseline network from urbanaccess results
 edges=pd.read_csv(EDGES_PATH)
 nodes=pd.read_csv(NODES_PATH)
+
+nodes_lon=nodes['x'].values
+nodes_lat=nodes['y'].values
+nodes_x, nodes_y= pyproj.transform(wgs, projection,nodes_lon, nodes_lat)
+kdtree_base_nodes=spatial.KDTree(np.column_stack((nodes_x, nodes_y)))
+
+
 graph=nx.DiGraph()
 for i, row in edges.iterrows():
     graph.add_edge(row['from_int'], row['to_int'], 
                      attr_dict={'weight_minutes':row['weight']})
-rev_graph=graph.reverse()
-amenities_at_nodes={n: {t:0 for t in base_amenities} for n in graph.nodes}   
-# =============================================================================
+    
+amenities_at_base_nodes={n: {t:0 for t in base_amenities} for n in graph.nodes}               
+# associate each amenity with its closest node in the base network
+for tag in base_amenities:
+    for ai in range(len(base_amenities[tag]['x'])):
+        nearest_node=nodes.iloc[kdtree_base_nodes.query(
+                [base_amenities[tag]['x'][ai],
+                base_amenities[tag]['y'][ai]])[1]]['id_int']
+        amenities_at_base_nodes[nearest_node][tag]+=1
+        
+
+# Add links for the new network defined by the interactive area    
+graph=createGridGraphs(grid_points_xy, graph, cityIO_spatial_data['nrows'], 
+                       cityIO_spatial_data['ncols'], cityIO_spatial_data['cellSize'], 
+                       kdtree_base_nodes)
 
 # =============================================================================
-# Prepare the grid points for the output accessibility results
-nodes_x=nodes['x'].values
-nodes_y=nodes['y'].values
-points=[[nodes_x[i], nodes_y[i]] for i in range(len(nodes_y))]
 
-kdtree_nodes=spatial.KDTree(np.column_stack((nodes_x, nodes_y)))
+# =============================================================================
+# Prepare the sample grid points for the output accessibility results
+sample_lons=[f['geometry']['coordinates'][0][0][0] for f in grid_full_table['features']]
+sample_lats=[f['geometry']['coordinates'][0][0][1] for f in grid_full_table['features']]
+sample_x, sample_y= pyproj.transform(wgs, projection,sample_lons, sample_lats)
 
-lng_min, lat_min, lng_max, lat_max
-x = (np.linspace(lng_min,lng_max,50))
-y =  (np.linspace(lat_min,lat_max,50))
-xs,ys = np.meshgrid(x,y)
-xs=xs.reshape(xs.shape[0]*xs.shape[1])
-ys=ys.reshape(ys.shape[0]*ys.shape[1])
-
-sample_nodes_id_int=[nodes.iloc[kdtree_nodes.query(
-        [xs[i], ys[i]])[1]]['id_int'] for i in range(len(xs))]
 # =============================================================================
 
 # =============================================================================
 # Baseline Accessibility
-# =============================================================================
-for tag in base_amenities:
-    for ai in range(len(base_amenities[tag]['x'])):
-        nearest_node=nodes.iloc[kdtree_nodes.query(
-                [base_amenities[tag]['x'][ai],
-                base_amenities[tag]['y'][ai]])[1]]['id_int']
-        amenities_at_nodes[nearest_node][tag]+=1
+# add virtual links joining each sample point to its closest nodes within a tolerance
+# include both baseline links and new links
 
+# first create new kdTree including the baseline nodes and the new gird nodes
+all_nodes_ids, all_nodes_xy=[], []
+for ind_node in range(len(nodes_x)):
+    all_nodes_ids.append(nodes.iloc[ind_node]['id_int'])
+    all_nodes_xy.append([nodes_x[ind_node], nodes_y[ind_node]])
+for ind_grid_cell in range(len(grid_points_xy)):
+    all_nodes_ids.append('g'+str(ind_grid_cell))
+    all_nodes_xy.append(grid_points_xy[ind_grid_cell])
 
-sample_nodes_acc_base={n: {t:0 for t in base_amenities} for n in set(
-        sample_nodes_id_int)}
-for n in sample_nodes_acc_base:
-    isochrone_graph=nx.ego_graph(graph, n, radius=RADIUS, center=True, 
+kdtree_all_nodes=spatial.KDTree(np.array(all_nodes_xy))
+
+all_sample_node_ids=[]
+for p in range(len(sample_x)):
+    all_sample_node_ids.append('s'+str(p))
+    graph.add_node('s'+str(p))
+    distance_to_closest, closest_nodes=kdtree_all_nodes.query([sample_x[p], sample_y[p]], 5)
+    for candidate in zip(distance_to_closest, closest_nodes):
+        if candidate[0]<30:
+            close_node_id=all_nodes_ids[candidate[1]]
+            graph.add_edge('s'+str(p), close_node_id, 
+                     attr_dict={'weight_minutes':candidate[0]/walk_speed_met_min})
+
+           
+# for each sample node, create an isochrone and count the amenities of each type        
+sample_nodes_acc_base={n: {t:0 for t in base_amenities} for n in range(len(sample_x))} 
+for sn in sample_nodes_acc_base:
+    isochrone_graph=nx.ego_graph(graph, 's'+str(sn), radius=RADIUS, center=True, 
                                  undirected=False, distance='weight')
+    reachable_real_nodes=[n for n in isochrone_graph.nodes if n in amenities_at_base_nodes]
     for tag in base_amenities:
-        sample_nodes_acc_base[n][tag]=sum([amenities_at_nodes[n][tag] for n in isochrone_graph.nodes])
-    
-access_grids=[sample_nodes_acc_base[n] for n in sample_nodes_id_int]
-grid_geojson=create_access_geojson(xs, ys, access_grids)
+        sample_nodes_acc_base[sn][tag]=sum([amenities_at_base_nodes[reachable_node][tag] 
+                                            for reachable_node in reachable_real_nodes])    
+
+# build the acessiility grid
+scalers_base={t: 1.5*max([sample_nodes_acc_base[i][t] for i in range(
+        len(sample_nodes_acc_base))]) for t in base_amenities}
+grid_geojson=create_access_geojson(sample_lons, sample_lats, 
+                                   sample_nodes_acc_base, scalers_base)
 r = requests.post(access_output_path, data = json.dumps(grid_geojson))
+print(r)
+# =============================================================================
 
 # =============================================================================
 # Interactive Accessibility Analysis
+# instead of recomputing the isochrone for every sample point, we will reverse 
+# the graph and compute the isochrone around each new amenity
+rev_graph=graph.reverse()
+first_pass=True 
 lastId=0
 while True:
 #check if grid data changed
@@ -185,20 +291,27 @@ while True:
             cityIO_data=json.load(open(CITYIO_SAMPLE_PATH))  
             cityIO_grid_data=cityIO_data['grid']
         lastId=hash_id
-        sample_nodes_acc=sample_nodes_acc_base.copy()
+        sample_nodes_acc={n: {t:sample_nodes_acc_base[n][t] for t in base_amenities
+                              } for n in range(len(sample_x))}
 # =============================================================================
 # Fake the locations of new amenities until we have this input 
         for gi, usage in enumerate(cityIO_grid_data):
-            a_tag=lu_types_to_amenities[usage[0]]
-            a_node=nodes.iloc[kdtree_nodes.query([grid_points_ll[gi][0],
-                                                  grid_points_ll[gi][1]])[1]]['id_int']
+            if usage[0] in lu_types_to_amenities:
+                a_tag=lu_types_to_amenities[usage[0]]
+            else:
+                a_tag='food'
+            a_node='g'+str(gi)
             affected_nodes=nx.ego_graph(rev_graph, a_node, radius=RADIUS, center=True, 
                                  undirected=False, distance='weight').nodes
             for n in affected_nodes:
-                if n in sample_nodes_acc:
-                    sample_nodes_acc[n][a_tag]+=1  
-        access_grids=[sample_nodes_acc_base[n] for n in sample_nodes_id_int]
-        grid_geojson=create_access_geojson(xs, ys, access_grids)
+                if n in all_sample_node_ids:
+                    sample_nodes_acc[int(n.split('s')[1])][a_tag]+=1 
+        if first_pass:
+            scalers={t: 1.1*max([sample_nodes_acc[i][t] for i in range(
+                    len(sample_nodes_acc_base))]) for t in base_amenities}
+        first_pass=False
+        grid_geojson=create_access_geojson(sample_lons, sample_lats, 
+                                           sample_nodes_acc, scalers)
         r = requests.post(access_output_path, data = json.dumps(grid_geojson))
         print(r)
         sleep(1) 

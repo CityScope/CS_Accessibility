@@ -4,7 +4,7 @@ mapboxgl.accessToken = MAPBOX_TOKEN;
 map = new mapboxgl.Map({
       container: 'map', // container id
       style: 'mapbox://styles/mapbox/dark-v9',
-      center: [ 10, 42.5], // starting position [lng, lat]
+      center: [ 10, 53.5], // starting position [lng, lat]
       // center: [0,0],
       zoom: 8 ,// starting zoom
       pitch: 0
