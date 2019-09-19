@@ -242,9 +242,9 @@ sample_x, sample_y= create_sample_points(full_grid_x, full_grid_y, col_margin_le
                                          cell_height,stride)
 sample_lons, sample_lats=pyproj.transform(projection,wgs, sample_x, sample_y)
 
-import matplotlib.pyplot as plt
-plt.scatter(full_grid_x, full_grid_y, color='blue')
-plt.scatter(sample_x, sample_y, color='red', alpha=0.5)
+#import matplotlib.pyplot as plt
+#plt.scatter(full_grid_x, full_grid_y, color='blue')
+#plt.scatter(sample_x, sample_y, color='red', alpha=0.5)
 #plt.scatter([n[0] for n in all_nodes_xy], [n[1] for n in all_nodes_xy], color='green', alpha=0.1)
 # =============================================================================
 
