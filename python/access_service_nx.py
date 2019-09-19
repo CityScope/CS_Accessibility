@@ -70,6 +70,21 @@ def get_osm_amenies(bounds, tags):
                     amenities[t]['x'].append(x)
                     amenities[t]['y'].append(y)
     return amenities
+
+def create_sample_points(grid_x, grid_y, col_margin_left, row_margin_top, 
+                         cell_width, cell_height,stride):
+    """
+    X denotes a coodrinate [x,y]
+    dXdRow denotes the change in the coordinates when the row index increases by 1
+    """
+    dXdCol=np.array([grid_x[1]-grid_x[0], grid_y[1]-grid_y[0]])
+    dXdRow=np.array([dXdCol[1], -dXdCol[0]]) # rotate the vector 90 degrees
+    grid_origin=np.array([grid_x[0], grid_y[0]])
+    sample_points_origin=grid_origin-row_margin_top*dXdRow-col_margin_left*dXdCol
+    sample_points=np.array([sample_points_origin+stride*j*dXdCol+stride*i*dXdRow for i in range(
+            int(cell_height/stride)) for j in range(int(cell_width/stride))])
+    return list(sample_points[:,0]), list(sample_points[:,1])
+    
         
 def create_access_geojson(xs, ys, grids, scalers):
     """
@@ -83,7 +98,7 @@ def create_access_geojson(xs, ys, grids, scalers):
     }    
     for i in range(len(xs)):
         geom={"type": "Point","coordinates": [xs[i],ys[i]]}
-        props={t: np.power(grids[i][t]/scalers[t], 2) for t in base_amenities}
+        props={t: np.power(grids[i][t]/scalers[t], 1) for t in base_amenities}
         feat={
          "type": "Feature",
          "properties": props,
@@ -212,10 +227,25 @@ graph=createGridGraphs(grid_points_xy, graph, cityIO_spatial_data['nrows'],
 
 # =============================================================================
 # Prepare the sample grid points for the output accessibility results
-sample_lons=[f['geometry']['coordinates'][0][0][0] for f in grid_full_table['features']]
-sample_lats=[f['geometry']['coordinates'][0][0][1] for f in grid_full_table['features']]
-sample_x, sample_y= pyproj.transform(wgs, projection,sample_lons, sample_lats)
+# Sampling points should correspond to points on the full_table grid but extend 
+# further in the surrounding city
+full_grid_lons=[f['geometry']['coordinates'][0][0][0] for f in grid_full_table['features']]
+full_grid_lats=[f['geometry']['coordinates'][0][0][1] for f in grid_full_table['features']]
+full_grid_x, full_grid_y= pyproj.transform(wgs, projection,full_grid_lons, full_grid_lats)
+col_margin_left=70
+row_margin_top=50
+cell_width=250
+cell_height=250
+stride=5
+sample_x, sample_y= create_sample_points(full_grid_x, full_grid_y, col_margin_left, 
+                                         row_margin_top, cell_width, 
+                                         cell_height,stride)
+sample_lons, sample_lats=pyproj.transform(projection,wgs, sample_x, sample_y)
 
+import matplotlib.pyplot as plt
+plt.scatter(full_grid_x, full_grid_y, color='blue')
+plt.scatter(sample_x, sample_y, color='red', alpha=0.5)
+#plt.scatter([n[0] for n in all_nodes_xy], [n[1] for n in all_nodes_xy], color='green', alpha=0.1)
 # =============================================================================
 
 # =============================================================================
@@ -257,7 +287,7 @@ for sn in sample_nodes_acc_base:
                                             for reachable_node in reachable_real_nodes])    
 
 # build the acessiility grid
-scalers_base={t: 1.5*max([sample_nodes_acc_base[i][t] for i in range(
+scalers_base={t: 1*max([sample_nodes_acc_base[i][t] for i in range(
         len(sample_nodes_acc_base))]) for t in base_amenities}
 grid_geojson=create_access_geojson(sample_lons, sample_lats, 
                                    sample_nodes_acc_base, scalers_base)
