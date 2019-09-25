@@ -12,7 +12,7 @@ map = new mapboxgl.Map({
 
 map.on('load', function(){ 
   // d3.json("./python/Boston/output_geojson.geojson", function(data) {
-    d3.json("https://cityio.media.mit.edu/api/table/grasbrook/access", function(data) {
+    d3.json("https://cityio.media.mit.edu/api/table/csepel/access", function(data) {
     console.log(data);
     makeMap(data);
   });

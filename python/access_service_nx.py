@@ -16,31 +16,32 @@ import numpy as np
 from scipy import spatial
 import pyproj
 
-city='Hamburg'
-lng_min, lat_min, lng_max, lat_max = 9.965, 53.509, 10.05, 53.55
+city='Budapest'
 
+configs=json.load(open('./python/configs.json'))
+city_configs=configs[city]
 
-table_name_map={'Boston':"mocho",
-                'Hamburg':"grasbrook",
-                'Detroit': 'corktown'}
+table_name=city_configs['table_name']
 host='https://cityio.media.mit.edu/'
 
 lu_types_to_amenities={0: 'education', 1: 'groceries', 2:'food', 3: 'nightlife',
                        4: 'food'}
 RADIUS=20
 
-CITYIO_SAMPLE_PATH='./python/Hamburg/data/sample_cityio_data.json'
-NODES_PATH='./python/Hamburg/data/comb_network_nodes.csv'
-EDGES_PATH='./python/Hamburg/data/comb_network_edges.csv'
-GRID_INT_SAMPLE_PATH='./python/Hamburg/data/grid_interactive.geojson'
-GRID_FULL_SAMPLE_PATH='./python/Hamburg/data/grid_full.geojson'
+CITYIO_SAMPLE_PATH='./python/'+city+'/data/sample_cityio_data.json'
+UA_NODES_PATH='./python/'+city+'/data/comb_network_nodes.csv'
+UA_EDGES_PATH='./python/'+city+'/data/comb_network_edges.csv'
+#PED_NODES_PATH='./python/'+city+'/data/osm_ped_network_nodes.csv'
+#PED_EDGES_PATH='./python/'+city+'/data/osm_ped_network_edges.csv'
+GRID_INT_SAMPLE_PATH='./python/'+city+'/data/grid_interactive.geojson'
+GRID_FULL_SAMPLE_PATH='./python/'+city+'/data/grid_full.geojson'
 
-local_epsg = '31468'
+local_epsg = city_configs['local_epsg']
 projection=pyproj.Proj("+init=EPSG:"+local_epsg)
 wgs=pyproj.Proj("+init=EPSG:4326")
 
-cityIO_grid_url=host+'api/table/'+table_name_map[city]
-cityIO_output_path=host+'api/table/update/'+table_name_map[city]+'/'
+cityIO_grid_url=host+'api/table/'+table_name
+cityIO_output_path=host+'api/table/update/'+table_name+'/'
 access_output_path=cityIO_output_path+'access'
 
 walk_speed_met_min=5*1000/60
@@ -187,15 +188,15 @@ tags={
       'education': ['amenity_school', 'amenity_university', 'amenity_college']
       }
 # To get all amenity data
-bounds_all=9.965, 53.509, 10.05, 53.55
+bounds_all=city_configs['bboxes']['amenities']
 base_amenities=get_osm_amenies(bounds_all, tags)
 # =============================================================================
 
 # =============================================================================
 # Create the transport network
 # Baseline network from urbanaccess results
-edges=pd.read_csv(EDGES_PATH)
-nodes=pd.read_csv(NODES_PATH)
+edges=pd.read_csv(UA_EDGES_PATH)
+nodes=pd.read_csv(UA_NODES_PATH)   
 
 nodes_lon=nodes['x'].values
 nodes_lat=nodes['y'].values
@@ -232,11 +233,11 @@ graph=createGridGraphs(grid_points_xy, graph, cityIO_spatial_data['nrows'],
 full_grid_lons=[f['geometry']['coordinates'][0][0][0] for f in grid_full_table['features']]
 full_grid_lats=[f['geometry']['coordinates'][0][0][1] for f in grid_full_table['features']]
 full_grid_x, full_grid_y= pyproj.transform(wgs, projection,full_grid_lons, full_grid_lats)
-col_margin_left=70
-row_margin_top=50
-cell_width=250
-cell_height=250
-stride=5
+col_margin_left=city_configs['sampling_grid']['col_margin_left']
+row_margin_top=city_configs['sampling_grid']['row_margin_top']
+cell_width=city_configs['sampling_grid']['cell_width']
+cell_height=city_configs['sampling_grid']['cell_height']
+stride=city_configs['sampling_grid']['stride']
 sample_x, sample_y= create_sample_points(full_grid_x, full_grid_y, col_margin_left, 
                                          row_margin_top, cell_width, 
                                          cell_height,stride)
