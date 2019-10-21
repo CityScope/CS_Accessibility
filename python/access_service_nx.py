@@ -16,7 +16,7 @@ import numpy as np
 from scipy import spatial
 import pyproj
 
-city='Budapest'
+city='Hamburg'
 
 configs=json.load(open('./python/configs.json'))
 city_configs=configs[city]
@@ -327,6 +327,9 @@ while True:
 # =============================================================================
 # Fake the locations of new amenities until we have this input 
         for gi, usage in enumerate(cityIO_grid_data):
+            if not type(usage)==list:
+                print('Usage value is not a list: '+str(usage))
+                usage=[-1,-1]
             if usage[0] in lu_types_to_amenities:
                 a_tag=lu_types_to_amenities[usage[0]]
             else:
