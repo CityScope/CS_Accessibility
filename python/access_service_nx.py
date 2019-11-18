@@ -16,7 +16,7 @@ import numpy as np
 from scipy import spatial
 import pyproj
 
-city='Hamburg'
+city='Detroit'
 
 configs=json.load(open('./python/configs.json'))
 city_configs=configs[city]

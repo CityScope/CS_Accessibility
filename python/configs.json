@@ -4,6 +4,7 @@
     },
     "bboxes": {
       "all_zones": [9.734413735728332, 53.39638099802139, 10.325271108603445, 53.72943554464314],
+      "sim_area": [10.000748807171703, 53.52640987365575, 10.02223991398489, 53.53789434597681],
       "amenities": [9.965, 53.509, 10.05, 53.55]
     },
     "local_epsg" : "31468",
@@ -37,7 +38,17 @@
       "People Mover": "https://data.detroitmi.gov/api/views/4bkd-9u3w/files/c32fecf1-d8cc-4e53-8fc1-a021ccf4d0a9?filename=dtc-gtfs.zip"
     },
     "bboxes": {
-      "all_zones": [-83.551907, 42.0314796546585, -82.870347, 42.451235]
+      "all_zones": [-83.551907, 42.0314796546585, -82.870347, 42.451235],
+      "sim_area": [-83.08380145066617, 42.31830026300959, -83.05810085592515, 42.33437392961238],
+      "amenities": [-83.096, 42.314, -83.04, 42.35]
+    },
+    "local_epsg" :"2253",
+    "sampling_grid": {
+      "col_margin_left":70,
+      "row_margin_top":70,
+      "cell_width":190,
+      "cell_height":150,
+      "stride":5
     },
     "table_name": "corktown"
   }
