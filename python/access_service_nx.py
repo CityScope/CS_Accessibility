@@ -160,16 +160,13 @@ except:
     print('Using static cityIO grid file')
     meta_grid=json.load(open(META_GRID_SAMPLE_PATH))
     
-# Full meta grid geojson      
-try:
-    with urllib.request.urlopen(cityIO_grid_url+'/interactive_grid_mapping') as url:
-    #get the latest grid data
-        grid_mapping=json.loads(url.read().decode())
-except:
-    print('Using static cityIO grid file')
-    grid_mapping=json.load(open(GRID_MAPPING_SAMPLE_PATH)  )  
+# Interactive cell to meta_grid geojson      
+int_to_meta_grid={}
+for fi, f in enumerate(meta_grid['features']):
+    if f['properties']['interactive']:
+        int_to_meta_grid[int(f['properties']['interactive_id'])]=fi 
 
-grid_points_ll=[meta_grid['features'][grid_mapping[str(int_grid_cell)]][
+grid_points_ll=[meta_grid['features'][int_to_meta_grid[int_grid_cell]][
         'geometry']['coordinates'][0][0
         ] for int_grid_cell in range(n_cells)]
 
