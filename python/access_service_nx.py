@@ -30,12 +30,10 @@ lu_types_to_amenities={3: 'groceries',
 RADIUS=20
 
 CITYIO_SAMPLE_PATH='./python/'+city+'/data/sample_cityio_data.json'
+META_GRID_SAMPLE_PATH='./python/'+city+'/data/meta_grid.geojson'
+GRID_MAPPING_SAMPLE_PATH='./python/'+city+'/data/grid_mapping.geojson'
 UA_NODES_PATH='./python/'+city+'/data/comb_network_nodes.csv'
 UA_EDGES_PATH='./python/'+city+'/data/comb_network_edges.csv'
-#PED_NODES_PATH='./python/'+city+'/data/osm_ped_network_nodes.csv'
-#PED_EDGES_PATH='./python/'+city+'/data/osm_ped_network_edges.csv'
-GRID_INT_SAMPLE_PATH='./python/'+city+'/data/grid_interactive.geojson'
-GRID_FULL_SAMPLE_PATH='./python/'+city+'/data/grid_full.geojson'
 
 local_epsg = city_configs['local_epsg']
 projection=pyproj.Proj("+init=EPSG:"+local_epsg)
@@ -151,29 +149,30 @@ except:
     print('Using static cityIO grid file')
     cityIO_data=json.load(open(CITYIO_SAMPLE_PATH))
     cityIO_spatial_data=cityIO_data['header']['spatial']
+n_cells=cityIO_spatial_data['ncols']*cityIO_spatial_data['nrows']
 
-# TODO: only get the meta-grid
-    
-# Interactive grid geojson    
+# Full meta grid geojson      
 try:
-    with urllib.request.urlopen(cityIO_grid_url+'/grid_interactive_area') as url:
+    with urllib.request.urlopen(cityIO_grid_url+'/meta_grid') as url:
     #get the latest grid data
-        grid_interactive=json.loads(url.read().decode())
+        meta_grid=json.loads(url.read().decode())
 except:
     print('Using static cityIO grid file')
-    grid_interactive=json.load(open(GRID_INT_SAMPLE_PATH))
+    meta_grid=json.load(open(META_GRID_SAMPLE_PATH))
     
-# Full table grid geojson      
+# Full meta grid geojson      
 try:
-    with urllib.request.urlopen(cityIO_grid_url+'/grid_full_table') as url:
+    with urllib.request.urlopen(cityIO_grid_url+'/interactive_grid_mapping') as url:
     #get the latest grid data
-        grid_full_table=json.loads(url.read().decode())
+        grid_mapping=json.loads(url.read().decode())
 except:
     print('Using static cityIO grid file')
-    grid_full_table=json.load(open(GRID_FULL_SAMPLE_PATH))
-    
+    grid_mapping=json.load(open(GRID_MAPPING_SAMPLE_PATH)  )  
 
-grid_points_ll=[f['geometry']['coordinates'][0][0] for f in grid_interactive['features']]
+grid_points_ll=[meta_grid['features'][grid_mapping[str(int_grid_cell)]][
+        'geometry']['coordinates'][0][0
+        ] for int_grid_cell in range(n_cells)]
+
 grid_points_x, grid_points_y=pyproj.transform(wgs, projection,
                                               [grid_points_ll[p][0] for p in range(len(grid_points_ll))], 
                                               [grid_points_ll[p][1] for p in range(len(grid_points_ll))])
@@ -233,8 +232,8 @@ graph=createGridGraphs(grid_points_xy, graph, cityIO_spatial_data['nrows'],
 # Prepare the sample grid points for the output accessibility results
 # Sampling points should correspond to points on the full_table grid but extend 
 # further in the surrounding city
-full_grid_lons=[f['geometry']['coordinates'][0][0][0] for f in grid_full_table['features']]
-full_grid_lats=[f['geometry']['coordinates'][0][0][1] for f in grid_full_table['features']]
+full_grid_lons=[f['geometry']['coordinates'][0][0][0] for f in meta_grid['features']]
+full_grid_lats=[f['geometry']['coordinates'][0][0][1] for f in meta_grid['features']]
 full_grid_x, full_grid_y= pyproj.transform(wgs, projection,full_grid_lons, full_grid_lats)
 col_margin_left=city_configs['sampling_grid']['col_margin_left']
 row_margin_top=city_configs['sampling_grid']['row_margin_top']
