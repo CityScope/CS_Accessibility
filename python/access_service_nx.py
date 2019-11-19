@@ -15,8 +15,9 @@ import requests
 import numpy as np
 from scipy import spatial
 import pyproj
+import sys
 
-city='Detroit'
+city=sys.argv[1]
 
 configs=json.load(open('./python/configs.json'))
 city_configs=configs[city]
@@ -24,7 +25,7 @@ city_configs=configs[city]
 table_name=city_configs['table_name']
 host='https://cityio.media.mit.edu/'
 
-lu_types_to_amenities={0: 'education', 1: 'groceries', 2:'food', 3: 'nightlife',
+lu_types_to_amenities={3: 'groceries',
                        4: 'food'}
 RADIUS=20
 
@@ -151,6 +152,8 @@ except:
     cityIO_data=json.load(open(CITYIO_SAMPLE_PATH))
     cityIO_spatial_data=cityIO_data['header']['spatial']
 
+# TODO: only get the meta-grid
+    
 # Interactive grid geojson    
 try:
     with urllib.request.urlopen(cityIO_grid_url+'/grid_interactive_area') as url:
@@ -254,7 +257,7 @@ sample_lons, sample_lats=pyproj.transform(projection,wgs, sample_x, sample_y)
 # add virtual links joining each sample point to its closest nodes within a tolerance
 # include both baseline links and new links
 
-# first create new kdTree including the baseline nodes and the new gird nodes
+# first create new kdTree including the baseline nodes and the new grid nodes
 all_nodes_ids, all_nodes_xy=[], []
 for ind_node in range(len(nodes_x)):
     all_nodes_ids.append(nodes.iloc[ind_node]['id_int'])
@@ -265,16 +268,18 @@ for ind_grid_cell in range(len(grid_points_xy)):
 
 kdtree_all_nodes=spatial.KDTree(np.array(all_nodes_xy))
 
+# add the virtual links between sample points and closest nodes
+MAX_DIST_VIRTUAL=30
 all_sample_node_ids=[]
 for p in range(len(sample_x)):
     all_sample_node_ids.append('s'+str(p))
     graph.add_node('s'+str(p))
     distance_to_closest, closest_nodes=kdtree_all_nodes.query([sample_x[p], sample_y[p]], 5)
     for candidate in zip(distance_to_closest, closest_nodes):
-        if candidate[0]<30:
+        if candidate[0]<MAX_DIST_VIRTUAL:
             close_node_id=all_nodes_ids[candidate[1]]
             graph.add_edge('s'+str(p), close_node_id, 
-                     attr_dict={'weight_minutes':candidate[0]/walk_speed_met_min})
+                     attr_dict={'weight_minutes':candidate[0]/(walk_speed_met_min/2)})
 
            
 # for each sample node, create an isochrone and count the amenities of each type        
@@ -326,20 +331,22 @@ while True:
                               } for n in range(len(sample_x))}
 # =============================================================================
 # Fake the locations of new amenities until we have this input 
+        lu_counts={k:0 for k, v in lu_types_to_amenities.items()}
         for gi, usage in enumerate(cityIO_grid_data):
             if not type(usage)==list:
                 print('Usage value is not a list: '+str(usage))
                 usage=[-1,-1]
-            if usage[0] in lu_types_to_amenities:
-                a_tag=lu_types_to_amenities[usage[0]]
-            else:
-                a_tag='food'
-            a_node='g'+str(gi)
-            affected_nodes=nx.ego_graph(rev_graph, a_node, radius=RADIUS, center=True, 
-                                 undirected=False, distance='weight').nodes
-            for n in affected_nodes:
-                if n in all_sample_node_ids:
-                    sample_nodes_acc[int(n.split('s')[1])][a_tag]+=1 
+            this_grid_lu=int(usage[0])
+            if this_grid_lu in lu_types_to_amenities:
+                lu_counts[this_grid_lu]+=1
+                if lu_counts[this_grid_lu]%3==0: # assume only every nth LU has the amenity
+                    a_tag=lu_types_to_amenities[this_grid_lu]
+                    a_node='g'+str(gi)
+                    affected_nodes=nx.ego_graph(rev_graph, a_node, radius=RADIUS, center=True, 
+                                         undirected=False, distance='weight').nodes
+                    for n in affected_nodes:
+                        if n in all_sample_node_ids:
+                            sample_nodes_acc[int(n.split('s')[1])][a_tag]+=1 
         if first_pass:
             scalers={t: 1.1*max([sample_nodes_acc[i][t] for i in range(
                     len(sample_nodes_acc_base))]) for t in base_amenities}
