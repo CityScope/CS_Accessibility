@@ -11,6 +11,7 @@ import networkx as nx
 from time import sleep
 import json
 import urllib
+import random
 import requests
 import numpy as np
 from scipy import spatial
@@ -25,15 +26,20 @@ city_configs=configs[city]
 table_name=city_configs['table_name']
 host='https://cityio.media.mit.edu/'
 
-lu_types_to_amenities={3: 'groceries',
-                       4: 'food'}
+pois_per_lu={1: {'housing': 1000},
+                  2: {'housing': 2000},
+                  3: {'employment': 1000, 'groceries': 1/5},
+                  4: {'employment': 2000, 'food': 1}}
 RADIUS=20
+
+#add_grid_roads=city_configs['add_grid_roads']
 
 CITYIO_SAMPLE_PATH='./python/'+city+'/data/sample_cityio_data.json'
 META_GRID_SAMPLE_PATH='./python/'+city+'/data/meta_grid.geojson'
 GRID_MAPPING_SAMPLE_PATH='./python/'+city+'/data/grid_mapping.geojson'
 UA_NODES_PATH='./python/'+city+'/data/comb_network_nodes.csv'
 UA_EDGES_PATH='./python/'+city+'/data/comb_network_edges.csv'
+ZONES_PATH='python/'+city+'/data/model_area.geojson'
 
 local_epsg = city_configs['local_epsg']
 projection=pyproj.Proj("+init=EPSG:"+local_epsg)
@@ -98,7 +104,7 @@ def create_access_geojson(xs, ys, grids, scalers):
     }    
     for i in range(len(xs)):
         geom={"type": "Point","coordinates": [xs[i],ys[i]]}
-        props={t: np.power(grids[i][t]/scalers[t], 1) for t in base_amenities}
+        props={t: np.power(grids[i][t]/scalers[t], 1) for t in all_poi_types}
         feat={
          "type": "Feature",
          "properties": props,
@@ -179,16 +185,23 @@ grid_points_xy=[[grid_points_x[i], grid_points_y[i]] for i in range(len(grid_poi
 # =============================================================================
 # get all amenities in within bounding box of study area
 OSM_URL_ROOT='https://lz4.overpass-api.de/api/interpreter?data=[out:json][bbox];node[~"^(amenity|leisure|shop)$"~"."];out;&bbox='
-
-tags={
-      'food': ['amenity_restaurant', 'amenity_cafe' 'amenity_fast_food', 'amenity_pub'],
-      'nightlife': ['amenity_bar' , 'amenity_pub' , 'amenity_nightclub', 'amenity_biergarten'],  #(according to OSM, pubs may provide food, bars dont)
-      'groceries': ['shop_convenience', 'shop_grocer', 'shop_greengrocer', 'shop_food', 'shop_supermarket'], 
-      'education': ['amenity_school', 'amenity_university', 'amenity_college']
-      }
+#
+#tags={
+#      'food': ['amenity_restaurant', 'amenity_cafe' 'amenity_fast_food', 'amenity_pub'],
+#      'nightlife': ['amenity_bar' , 'amenity_pub' , 'amenity_nightclub', 'amenity_biergarten'],  #(according to OSM, pubs may provide food, bars dont)
+#      'groceries': ['shop_convenience', 'shop_grocer', 'shop_greengrocer', 'shop_food', 'shop_supermarket'], 
+#      'education': ['amenity_school', 'amenity_university', 'amenity_college']
+#      }
+tags=city_configs['osm_pois']
 # To get all amenity data
 bounds_all=city_configs['bboxes']['amenities']
 base_amenities=get_osm_amenies(bounds_all, tags)
+# =============================================================================
+
+# =============================================================================
+# Get the numbers of jobs and residents in every zone in the study area
+if city_configs['zonal_pois']:
+    zones = json.load(open(ZONES_PATH))
 # =============================================================================
 
 # =============================================================================
@@ -207,18 +220,27 @@ graph=nx.DiGraph()
 for i, row in edges.iterrows():
     graph.add_edge(row['from_int'], row['to_int'], 
                      attr_dict={'weight_minutes':row['weight']})
-    
-amenities_at_base_nodes={n: {t:0 for t in base_amenities} for n in graph.nodes}               
+  
+all_poi_types=[tag for tag in base_amenities]+city_configs['zonal_pois']
+pois_at_base_nodes={n: {t:0 for t in all_poi_types} for n in graph.nodes}             
 # associate each amenity with its closest node in the base network
 for tag in base_amenities:
     for ai in range(len(base_amenities[tag]['x'])):
         nearest_node=nodes.iloc[kdtree_base_nodes.query(
                 [base_amenities[tag]['x'][ai],
                 base_amenities[tag]['y'][ai]])[1]]['id_int']
-        amenities_at_base_nodes[nearest_node][tag]+=1
-        
+        pois_at_base_nodes[nearest_node][tag]+=1
+if city_configs['zonal_pois']:
+    for f in zones['features']:
+        centroid_xy=pyproj.transform(wgs, projection,f['properties']['centroid'][0], 
+                                     f['properties']['centroid'][1])
+        distance, nearest_node_ind=kdtree_base_nodes.query(centroid_xy)
+        nearest_node=nodes.iloc[nearest_node_ind]['id_int']
+        if distance<1000: #(because some zones are outside the network area)
+            for poi_type in city_configs['zonal_pois']:
+                pois_at_base_nodes[nearest_node][poi_type]+=f['properties'][poi_type]
 
-# Add links for the new network defined by the interactive area    
+# Add links for the new network defined by the interactive area  
 graph=createGridGraphs(grid_points_xy, graph, cityIO_spatial_data['nrows'], 
                        cityIO_spatial_data['ncols'], cityIO_spatial_data['cellSize'], 
                        kdtree_base_nodes)
@@ -242,10 +264,6 @@ sample_x, sample_y= create_sample_points(full_grid_x, full_grid_y, col_margin_le
                                          cell_height,stride)
 sample_lons, sample_lats=pyproj.transform(projection,wgs, sample_x, sample_y)
 
-#import matplotlib.pyplot as plt
-#plt.scatter(full_grid_x, full_grid_y, color='blue')
-#plt.scatter(sample_x, sample_y, color='red', alpha=0.5)
-#plt.scatter([n[0] for n in all_nodes_xy], [n[1] for n in all_nodes_xy], color='green', alpha=0.1)
 # =============================================================================
 
 # =============================================================================
@@ -277,20 +295,20 @@ for p in range(len(sample_x)):
             graph.add_edge('s'+str(p), close_node_id, 
                      attr_dict={'weight_minutes':candidate[0]/(walk_speed_met_min/2)})
 
-           
+
 # for each sample node, create an isochrone and count the amenities of each type        
-sample_nodes_acc_base={n: {t:0 for t in base_amenities} for n in range(len(sample_x))} 
+sample_nodes_acc_base={n: {poi_type:0 for poi_type in all_poi_types} for n in range(len(sample_x))} 
 for sn in sample_nodes_acc_base:
     isochrone_graph=nx.ego_graph(graph, 's'+str(sn), radius=RADIUS, center=True, 
                                  undirected=False, distance='weight')
-    reachable_real_nodes=[n for n in isochrone_graph.nodes if n in amenities_at_base_nodes]
-    for tag in base_amenities:
-        sample_nodes_acc_base[sn][tag]=sum([amenities_at_base_nodes[reachable_node][tag] 
+    reachable_real_nodes=[n for n in isochrone_graph.nodes if n in pois_at_base_nodes]
+    for poi_type in all_poi_types:
+        sample_nodes_acc_base[sn][poi_type]=sum([pois_at_base_nodes[reachable_node][poi_type] 
                                             for reachable_node in reachable_real_nodes])    
 
-# build the acessiility grid
-scalers_base={t: 1*max([sample_nodes_acc_base[i][t] for i in range(
-        len(sample_nodes_acc_base))]) for t in base_amenities}
+# build the acessibility grid
+scalers_base={poi_type: 1*max([sample_nodes_acc_base[i][poi_type] for i in range(
+        len(sample_nodes_acc_base))]) for poi_type in all_poi_types}
 grid_geojson=create_access_geojson(sample_lons, sample_lats, 
                                    sample_nodes_acc_base, scalers_base)
 r = requests.post(access_output_path, data = json.dumps(grid_geojson))
@@ -302,6 +320,14 @@ print(r)
 # instead of recomputing the isochrone for every sample point, we will reverse 
 # the graph and compute the isochrone around each new amenity
 rev_graph=graph.reverse()
+# find the sample nodes affected by each interactive grid cell
+affected_sample_nodes={}
+for gi in range(len(grid_points_xy)):
+    a_node='g'+str(gi)
+    affected_nodes=nx.ego_graph(rev_graph, a_node, radius=RADIUS, center=True, 
+     undirected=False, distance='weight').nodes
+    affected_sample_nodes[gi]=[n for n in affected_nodes if n in all_sample_node_ids]
+
 first_pass=True 
 lastId=0
 while True:
@@ -313,7 +339,7 @@ while True:
         print('Cant access cityIO')
         hash_id=1
     if hash_id==lastId:
-        sleep(1)
+        sleep(0.2)
     else:
         try:
             with urllib.request.urlopen(cityIO_grid_url+'/grid') as url:
@@ -323,34 +349,33 @@ while True:
             cityIO_data=json.load(open(CITYIO_SAMPLE_PATH))  
             cityIO_grid_data=cityIO_data['grid']
         lastId=hash_id
-        sample_nodes_acc={n: {t:sample_nodes_acc_base[n][t] for t in base_amenities
+        sample_nodes_acc={n: {t:sample_nodes_acc_base[n][t] for t in all_poi_types
                               } for n in range(len(sample_x))}
-# =============================================================================
-# Fake the locations of new amenities until we have this input 
-        lu_counts={k:0 for k, v in lu_types_to_amenities.items()}
         for gi, usage in enumerate(cityIO_grid_data):
             if not type(usage)==list:
                 print('Usage value is not a list: '+str(usage))
                 usage=[-1,-1]
             this_grid_lu=int(usage[0])
-            if this_grid_lu in lu_types_to_amenities:
-                lu_counts[this_grid_lu]+=1
-                if lu_counts[this_grid_lu]%3==0: # assume only every nth LU has the amenity
-                    a_tag=lu_types_to_amenities[this_grid_lu]
-                    a_node='g'+str(gi)
-                    affected_nodes=nx.ego_graph(rev_graph, a_node, radius=RADIUS, center=True, 
-                                         undirected=False, distance='weight').nodes
-                    for n in affected_nodes:
-                        if n in all_sample_node_ids:
-                            sample_nodes_acc[int(n.split('s')[1])][a_tag]+=1 
+            if this_grid_lu in pois_per_lu:
+                sample_nodes_to_update=affected_sample_nodes[gi]
+                for poi in pois_per_lu[this_grid_lu]:
+                    if poi in all_poi_types:
+                        n_to_add=pois_per_lu[this_grid_lu][poi]
+                        if n_to_add<1:
+                            if random.uniform(0,1)<=n_to_add:
+                                n_to_add=1
+                            else:
+                                n_to_add=0
+                        for n in sample_nodes_to_update:
+                            sample_nodes_acc[int(n.split('s')[1])][poi]+=n_to_add
         if first_pass:
             scalers={t: 1.1*max([sample_nodes_acc[i][t] for i in range(
-                    len(sample_nodes_acc_base))]) for t in base_amenities}
+                    len(sample_nodes_acc_base))]) for t in all_poi_types}
         first_pass=False
         grid_geojson=create_access_geojson(sample_lons, sample_lats, 
                                            sample_nodes_acc, scalers)
         r = requests.post(access_output_path, data = json.dumps(grid_geojson))
         print(r)
         sleep(1) 
-# =============================================================================
+
 # =============================================================================

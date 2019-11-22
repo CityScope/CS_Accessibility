@@ -4,3 +4,4 @@ js/token.js
 **/gtfsfeed_zips/
 **/logs/
 *.hdf5
+*.gz

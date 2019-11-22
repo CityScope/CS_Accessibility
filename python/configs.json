@@ -1,35 +1,89 @@
-{"Hamburg": {
+{
+  "Hamburg": {
     "feed_dicts": {
       "main": "http://daten.transparenz.hamburg.de/Dataport.HmbTG.ZS.Webservice.GetRessource100/GetRessource100.svc/32aedec8-c69f-4053-a5e8-9b1267eb25de/Upload__HVV_Rohdaten_GTFS_Fpl_20190207.zip"
     },
     "bboxes": {
-      "all_zones": [9.734413735728332, 53.39638099802139, 10.325271108603445, 53.72943554464314],
-      "sim_area": [10.000748807171703, 53.52640987365575, 10.02223991398489, 53.53789434597681],
-      "amenities": [9.965, 53.509, 10.05, 53.55]
+      "all_zones": [
+        9.734413735728332,
+        53.39638099802139,
+        10.325271108603445,
+        53.72943554464314
+      ],
+      "sim_area": [
+        10.000748807171703,
+        53.52640987365575,
+        10.02223991398489,
+        53.53789434597681
+      ],
+      "amenities": [
+        9.965,
+        53.509,
+        10.05,
+        53.55
+      ]
     },
-    "local_epsg" : "31468",
+    "zonal_pois": [],
+    "osm_pois": {
+      "food": [
+        "amenity_restaurant",
+        "amenity_cafe",
+        "amenity_fast_food",
+        "amenity_pub"
+      ],
+      "nightlife": [
+        "amenity_bar",
+        "amenity_pub",
+        "amenity_nightclub",
+        "amenity_biergarten"
+      ],
+      "groceries": [
+        "shop_convenience",
+        "shop_grocer",
+        "shop_greengrocer",
+        "shop_food",
+        "shop_supermarket"
+      ],
+      "education": [
+        "amenity_school",
+        "amenity_university",
+        "amenity_college"
+      ]
+    },
+    "local_epsg": "31468",
     "sampling_grid": {
-      "col_margin_left":70,
-      "row_margin_top":50,
-      "cell_width":250,
-      "cell_height":250,
-      "stride":5
+      "col_margin_left": 70,
+      "row_margin_top": 50,
+      "cell_width": 250,
+      "cell_height": 250,
+      "stride": 5
     },
-    "table_name": "grasbrook"
+    "table_name": "grasbrook",
+    "add_grid_roads":true
   },
   "Budapest": {
     "bboxes": {
-      "all_zones": [18.95, 47.38, 19.14, 47.52],
-      "amenities": [19,47.36, 19.137, 47.49]
+      "all_zones": [
+        18.95,
+        47.38,
+        19.14,
+        47.52
+      ],
+      "amenities": [
+        19,
+        47.36,
+        19.137,
+        47.49
+      ]
     },
-    "local_epsg" : "32633",
+    "local_epsg": "32633",
     "table_name": "csepel",
     "sampling_grid": {
-      "col_margin_left":30,
-      "row_margin_top":30,
-      "cell_width":150,
-      "cell_height":150,
-      "stride":5
+      "col_margin_left": 30,
+      "row_margin_top": 30,
+      "cell_width": 150,
+      "cell_height": 150,
+      "stride": 5
     }
   },
   "Detroit": {
@@ -38,21 +92,64 @@
       "People Mover": "https://data.detroitmi.gov/api/views/4bkd-9u3w/files/c32fecf1-d8cc-4e53-8fc1-a021ccf4d0a9?filename=dtc-gtfs.zip"
     },
     "bboxes": {
-      "all_zones": [-83.551907, 42.0314796546585, -82.870347, 42.451235],
-      "sim_area": [-83.08380145066617, 42.31830026300959, -83.05810085592515, 42.33437392961238],
-      "amenities": [-83.096, 42.314, -83.04, 42.35]
+      "all_zones": [
+        -83.551907,
+        42.0314796546585,
+        -82.870347,
+        42.451235
+      ],
+      "sim_area": [
+        -83.08380145066617,
+        42.31830026300959,
+        -83.05810085592515,
+        42.33437392961238
+      ],
+      "amenities": [
+        -83.096,
+        42.314,
+        -83.04,
+        42.35
+      ]
     },
-    "local_epsg" :"2253",
+    "osm_pois": {
+      "food": [
+        "amenity_restaurant",
+        "amenity_cafe",
+        "amenity_fast_food",
+        "amenity_pub"
+      ],
+      "nightlife": [
+        "amenity_bar",
+        "amenity_pub",
+        "amenity_nightclub",
+        "amenity_biergarten"
+      ],
+      "groceries": [
+        "shop_convenience",
+        "shop_grocer",
+        "shop_greengrocer",
+        "shop_food",
+        "shop_supermarket"
+      ],
+      "education": [
+        "amenity_school",
+        "amenity_university",
+        "amenity_college"
+      ]
+    },
+    "zonal_pois": [
+      "housing",
+      "employment"
+    ],
+    "local_epsg": "2253",
     "sampling_grid": {
-      "col_margin_left":70,
-      "row_margin_top":70,
-      "cell_width":190,
-      "cell_height":150,
-      "stride":5
+      "col_margin_left": 70,
+      "row_margin_top": 70,
+      "cell_width": 190,
+      "cell_height": 150,
+      "stride": 5
     },
-    "table_name": "corktown"
+    "table_name": "corktown",
+    "add_grid_roads":false
   }
 }
-
-
-
