@@ -23,7 +23,7 @@
         53.55
       ]
     },
-    "zonal_pois": [],
+    "zonal_pois": ["housing"],
     "osm_pois": {
       "food": [
         "amenity_restaurant",

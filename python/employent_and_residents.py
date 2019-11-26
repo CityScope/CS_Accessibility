@@ -10,10 +10,6 @@ import json
 import numpy as np
 import pandas as pd
 
-city='Detroit'
-
-ZONES_PATH='python/'+city+'/data/model_area.geojson'
-OD_PATH='python/'+city+'/data/LODES/mi_od_main_JT00_2017.csv.gz'
 
 def approx_shape_centroid(geometry):
     if geometry['type']=='Polygon':
@@ -26,6 +22,24 @@ def approx_shape_centroid(geometry):
         print('Unknown geometry type')
 
 
+# =============================================================================
+# Hamburg
+# =============================================================================
+city='Hamburg'
+stat_areas=json.load(open('python/Hamburg/data/stat_areas.geojson'))
+for f in stat_areas['features']:
+    f['properties']['centroid']=approx_shape_centroid(f['geometry'])
+    f['properties']['housing']=int(f['properties']['BevGes'])
+json.dump(stat_areas, open('python/'+city+'/data/model_area.geojson', 'w'))
+
+# =============================================================================
+# Detroit
+# =============================================================================
+
+city='Detroit'
+
+ZONES_PATH='python/'+city+'/data/model_area.geojson'
+OD_PATH='python/'+city+'/data/LODES/mi_od_main_JT00_2017.csv.gz'
 
 od=pd.read_csv(OD_PATH)
 zones = json.load(open(ZONES_PATH))
