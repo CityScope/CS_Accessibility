@@ -48,6 +48,7 @@ wgs=pyproj.Proj("+init=EPSG:4326")
 cityIO_grid_url=host+'api/table/'+table_name
 cityIO_output_path=host+'api/table/update/'+table_name+'/'
 access_output_path=cityIO_output_path+'access'
+indicator_output_path=cityIO_output_path+'ind_access'
 
 walk_speed_met_min=5*1000/60
 
@@ -311,8 +312,14 @@ scalers_base={poi_type: 1*max([sample_nodes_acc_base[i][poi_type] for i in range
         len(sample_nodes_acc_base))]) for poi_type in all_poi_types}
 grid_geojson=create_access_geojson(sample_lons, sample_lats, 
                                    sample_nodes_acc_base, scalers_base)
+avg_access={t: np.mean([sample_nodes_acc_base[g][t
+                        ] for g in sample_nodes_acc_base]
+            ) for t in sample_nodes_acc_base[0]}
 r = requests.post(access_output_path, data = json.dumps(grid_geojson))
-print(r)
+print('Base geojson: {}'.format(r))
+r = requests.post(indicator_output_path, data = json.dumps(avg_access))
+print('Base indicators: {}'.format(r))
+
 # =============================================================================
 
 # =============================================================================
@@ -372,10 +379,15 @@ while True:
             scalers={t: 1.1*max([sample_nodes_acc[i][t] for i in range(
                     len(sample_nodes_acc_base))]) for t in all_poi_types}
         first_pass=False
+        avg_access={t: np.mean([sample_nodes_acc[g][t
+                        ] for g in sample_nodes_acc]
+            ) for t in sample_nodes_acc[0]}
         grid_geojson=create_access_geojson(sample_lons, sample_lats, 
                                            sample_nodes_acc, scalers)
         r = requests.post(access_output_path, data = json.dumps(grid_geojson))
-        print(r)
-        sleep(1) 
+        print('Geojson: {}'.format(r))
+        r = requests.post(indicator_output_path, data = json.dumps(avg_access))
+        print('Indicators: {}'.format(r))
+        sleep(0.5) 
 
 # =============================================================================
