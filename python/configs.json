@@ -1,7 +1,7 @@
 {
   "Hamburg": {
     "feed_dicts": {
-      "main": "http://daten.transparenz.hamburg.de/Dataport.HmbTG.ZS.Webservice.GetRessource100/GetRessource100.svc/32aedec8-c69f-4053-a5e8-9b1267eb25de/Upload__HVV_Rohdaten_GTFS_Fpl_20190207.zip"
+      "main": "http://daten.transparenz.hamburg.de/Dataport.HmbTG.ZS.Webservice.GetRessource100/GetRessource100.svc/0c0e35e2-8d5d-4211-af49-ee3a4e6c31db/Upload__HVV_Rohdaten_GTFS_Fpl_20191112.zip"
     },
     "bboxes": {
       "all_zones": [

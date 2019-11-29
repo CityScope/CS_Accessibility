@@ -32,13 +32,13 @@ pois_per_lu={1: {'housing': 1000},
                   4: {'employment': 2000, 'food': 1}}
 RADIUS=20
 
-#add_grid_roads=city_configs['add_grid_roads']
+add_grid_roads=city_configs['add_grid_roads']
 
 CITYIO_SAMPLE_PATH='./python/'+city+'/data/sample_cityio_data.json'
 META_GRID_SAMPLE_PATH='./python/'+city+'/data/meta_grid.geojson'
 GRID_MAPPING_SAMPLE_PATH='./python/'+city+'/data/grid_mapping.geojson'
-UA_NODES_PATH='./python/'+city+'/data/comb_network_nodes.csv'
-UA_EDGES_PATH='./python/'+city+'/data/comb_network_edges.csv'
+UA_NODES_PATH='./python/'+city+'/data/access_network_nodes.csv'
+UA_EDGES_PATH='./python/'+city+'/data/access_network_edges.csv'
 ZONES_PATH='python/'+city+'/data/model_area.geojson'
 
 local_epsg = city_configs['local_epsg']
@@ -50,7 +50,7 @@ cityIO_output_path=host+'api/table/update/'+table_name+'/'
 access_output_path=cityIO_output_path+'access'
 indicator_output_path=cityIO_output_path+'ind_access'
 
-walk_speed_met_min=5*1000/60
+dummy_link_speed_met_min=2*1000/60
 
 
 # =============================================================================
@@ -114,34 +114,40 @@ def create_access_geojson(xs, ys, grids, scalers):
         output_geojson["features"].append(feat) 
     return output_geojson
 
-def createGridGraphs(grid_coords_xy, graph, nrows, ncols, cell_size, kd_tree_nodes):
+def createGridGraphs(meta_grid_xy, interactive_meta_cells, graph, nrows, ncols, 
+                     cell_size, kd_tree_nodes, dist_thresh):
     """
     returns new networks including roads around the cells
     """
 #    create graph internal to the grid
-    graph.add_nodes_from('g'+str(n) for n in range(len(grid_coords_xy)))
+#    graph.add_nodes_from('g'+str(n) for n in range(len(grid_coords_xy)))
+    n_links_to_real_net=0
     for c in range(ncols):
         for r in range(nrows):
-            # if not at the end of a row, add h link
-            if not c==ncols-1:
-                graph.add_edge('g'+str(r*ncols+c), 'g'+str(r*ncols+c+1), 
-                      attr_dict={'weight_minutes':cell_size/walk_speed_met_min})
-                graph.add_edge('g'+str(r*ncols+c+1), 'g'+str(r*ncols+c), 
-                      attr_dict={'weight_minutes':cell_size/walk_speed_met_min})
-            # if not at the end of a column, add v link
-            if not r==nrows-1:
-                graph.add_edge('g'+str(r*ncols+c), 'g'+str((r+1)*ncols+c), 
-                      attr_dict={'weight_minutes':cell_size/walk_speed_met_min})
-                graph.add_edge('g'+str((r+1)*ncols+c), 'g'+str(r*ncols+c), 
-                      attr_dict={'weight_minutes':cell_size/walk_speed_met_min})
-    # create links between the 4 corners of the grid and the road network
-    for n in [0, ncols-1, (nrows-1)*ncols, (nrows*ncols)-1]: 
-        dist_to_closest, closest_ind=kd_tree_nodes.query(grid_coords_xy[n], k=1)
-        closest_node_id=nodes.iloc[closest_ind]['id_int']
-        graph.add_edge('g'+str(n), closest_node_id, attr_dict={ 
-                   'weight_minutes':dist_to_closest/walk_speed_met_min})
-        graph.add_edge(closest_node_id, 'g'+str(n), attr_dict={
-                   'weight_minutes':dist_to_closest/walk_speed_met_min})
+            cell_num=r*ncols+c
+            if cell_num in interactive_meta_cells: # if this is an interactive cell
+                # if close to any real nodes, make a link
+                dist_to_closest, closest_ind=kd_tree_nodes.query(meta_grid_xy[cell_num], k=1)
+                if dist_to_closest<dist_thresh:
+                    n_links_to_real_net+=1
+                    closest_node_id=nodes.iloc[closest_ind]['id_int']
+                    graph.add_edge('g'+str(cell_num), closest_node_id, attr_dict={ 
+                            'weight_minutes':dist_to_closest/dummy_link_speed_met_min})
+                    graph.add_edge(closest_node_id, 'g'+str(cell_num), attr_dict={
+                            'weight_minutes':dist_to_closest/dummy_link_speed_met_min})                    
+                # if not at the end of a row, add h link
+                if not c==ncols-1:
+                    graph.add_edge('g'+str(r*ncols+c), 'g'+str(r*ncols+c+1), 
+                          attr_dict={'weight_minutes':cell_size/dummy_link_speed_met_min})
+                    graph.add_edge('g'+str(r*ncols+c+1), 'g'+str(r*ncols+c), 
+                          attr_dict={'weight_minutes':cell_size/dummy_link_speed_met_min})
+                # if not at the end of a column, add v link
+                if not r==nrows-1:
+                    graph.add_edge('g'+str(r*ncols+c), 'g'+str((r+1)*ncols+c), 
+                          attr_dict={'weight_minutes':cell_size/dummy_link_speed_met_min})
+                    graph.add_edge('g'+str((r+1)*ncols+c), 'g'+str(r*ncols+c), 
+                          attr_dict={'weight_minutes':cell_size/dummy_link_speed_met_min})
+    print(n_links_to_real_net)
     return graph 
 # =============================================================================
 
@@ -172,27 +178,33 @@ int_to_meta_grid={}
 for fi, f in enumerate(meta_grid['features']):
     if f['properties']['interactive']:
         int_to_meta_grid[int(f['properties']['interactive_id'])]=fi 
+        
+with urllib.request.urlopen(cityIO_grid_url+'/meta_grid_header') as url:
+#get the latest grid data
+    meta_grid_header=json.loads(url.read().decode())
 
-grid_points_ll=[meta_grid['features'][int_to_meta_grid[int_grid_cell]][
+
+meta_grid_ll=[meta_grid['features'][i][
         'geometry']['coordinates'][0][0
-        ] for int_grid_cell in range(n_cells)]
+        ] for i in range(len(meta_grid['features']))]
 
-grid_points_x, grid_points_y=pyproj.transform(wgs, projection,
-                                              [grid_points_ll[p][0] for p in range(len(grid_points_ll))], 
-                                              [grid_points_ll[p][1] for p in range(len(grid_points_ll))])
-grid_points_xy=[[grid_points_x[i], grid_points_y[i]] for i in range(len(grid_points_x))]
+interactive_meta_cells=[v for k,v in int_to_meta_grid.items()]
+
+meta_grid_x, meta_grid_y=pyproj.transform(wgs, projection,
+                                              [meta_grid_ll[p][0] for p in range(len(meta_grid_ll))], 
+                                              [meta_grid_ll[p][1] for p in range(len(meta_grid_ll))])
+
+meta_grid_xy=[[meta_grid_x[i], meta_grid_y[i]] for i in range(len(meta_grid_x))]
+
+grid_points_xy=[meta_grid_xy[int_to_meta_grid[int_grid_cell]]
+                 for int_grid_cell in range(n_cells)]
 # =============================================================================
 
 # =============================================================================
 # get all amenities in within bounding box of study area
 OSM_URL_ROOT='https://lz4.overpass-api.de/api/interpreter?data=[out:json][bbox];node[~"^(amenity|leisure|shop)$"~"."];out;&bbox='
 #
-#tags={
-#      'food': ['amenity_restaurant', 'amenity_cafe' 'amenity_fast_food', 'amenity_pub'],
-#      'nightlife': ['amenity_bar' , 'amenity_pub' , 'amenity_nightclub', 'amenity_biergarten'],  #(according to OSM, pubs may provide food, bars dont)
-#      'groceries': ['shop_convenience', 'shop_grocer', 'shop_greengrocer', 'shop_food', 'shop_supermarket'], 
-#      'education': ['amenity_school', 'amenity_university', 'amenity_college']
-#      }
+
 tags=city_configs['osm_pois']
 # To get all amenity data
 bounds_all=city_configs['bboxes']['amenities']
@@ -242,9 +254,9 @@ if city_configs['zonal_pois']:
                 pois_at_base_nodes[nearest_node][poi_type]+=f['properties'][poi_type]
 
 # Add links for the new network defined by the interactive area  
-graph=createGridGraphs(grid_points_xy, graph, cityIO_spatial_data['nrows'], 
-                       cityIO_spatial_data['ncols'], cityIO_spatial_data['cellSize'], 
-                       kdtree_base_nodes)
+graph=createGridGraphs(meta_grid_xy, interactive_meta_cells, graph, meta_grid_header['nrows'], 
+                       meta_grid_header['ncols'], cityIO_spatial_data['cellSize'], 
+                       kdtree_base_nodes, 100)
 
 # =============================================================================
 
@@ -252,15 +264,15 @@ graph=createGridGraphs(grid_points_xy, graph, cityIO_spatial_data['nrows'],
 # Prepare the sample grid points for the output accessibility results
 # Sampling points should correspond to points on the full_table grid but extend 
 # further in the surrounding city
-full_grid_lons=[f['geometry']['coordinates'][0][0][0] for f in meta_grid['features']]
-full_grid_lats=[f['geometry']['coordinates'][0][0][1] for f in meta_grid['features']]
-full_grid_x, full_grid_y= pyproj.transform(wgs, projection,full_grid_lons, full_grid_lats)
+#full_grid_lons=[f['geometry']['coordinates'][0][0][0] for f in meta_grid['features']]
+#full_grid_lats=[f['geometry']['coordinates'][0][0][1] for f in meta_grid['features']]
+#full_grid_x, full_grid_y= pyproj.transform(wgs, projection,full_grid_lons, full_grid_lats)
 col_margin_left=city_configs['sampling_grid']['col_margin_left']
 row_margin_top=city_configs['sampling_grid']['row_margin_top']
 cell_width=city_configs['sampling_grid']['cell_width']
 cell_height=city_configs['sampling_grid']['cell_height']
 stride=city_configs['sampling_grid']['stride']
-sample_x, sample_y= create_sample_points(full_grid_x, full_grid_y, col_margin_left, 
+sample_x, sample_y= create_sample_points(meta_grid_x, meta_grid_y, col_margin_left, 
                                          row_margin_top, cell_width, 
                                          cell_height,stride)
 sample_lons, sample_lats=pyproj.transform(projection,wgs, sample_x, sample_y)
@@ -278,8 +290,9 @@ for ind_node in range(len(nodes_x)):
     all_nodes_ids.append(nodes.iloc[ind_node]['id_int'])
     all_nodes_xy.append([nodes_x[ind_node], nodes_y[ind_node]])
 for ind_grid_cell in range(len(grid_points_xy)):
-    all_nodes_ids.append('g'+str(ind_grid_cell))
-    all_nodes_xy.append(grid_points_xy[ind_grid_cell])
+    meta_grid_id=int_to_meta_grid[ind_grid_cell]
+    all_nodes_ids.append('g'+str(meta_grid_id))
+    all_nodes_xy.append(meta_grid_xy[meta_grid_id])
 
 kdtree_all_nodes=spatial.KDTree(np.array(all_nodes_xy))
 
@@ -294,7 +307,7 @@ for p in range(len(sample_x)):
         if candidate[0]<MAX_DIST_VIRTUAL:
             close_node_id=all_nodes_ids[candidate[1]]
             graph.add_edge('s'+str(p), close_node_id, 
-                     attr_dict={'weight_minutes':candidate[0]/(walk_speed_met_min/2)})
+                     attr_dict={'weight_minutes':candidate[0]/(dummy_link_speed_met_min)})
 
 
 # for each sample node, create an isochrone and count the amenities of each type        
@@ -330,7 +343,8 @@ rev_graph=graph.reverse()
 # find the sample nodes affected by each interactive grid cell
 affected_sample_nodes={}
 for gi in range(len(grid_points_xy)):
-    a_node='g'+str(gi)
+    # TODO: use the meta_grid index
+    a_node='g'+str(int_to_meta_grid[gi])
     affected_nodes=nx.ego_graph(rev_graph, a_node, radius=RADIUS, center=True, 
      undirected=False, distance='weight').nodes
     affected_sample_nodes[gi]=[n for n in affected_nodes if n in all_sample_node_ids]
@@ -352,9 +366,7 @@ while True:
             with urllib.request.urlopen(cityIO_grid_url+'/grid') as url:
                 cityIO_grid_data=json.loads(url.read().decode())
         except:
-            print('Using static cityIO grid file')
-            cityIO_data=json.load(open(CITYIO_SAMPLE_PATH))  
-            cityIO_grid_data=cityIO_data['grid']
+            print('Coudnt access city_IO')
         lastId=hash_id
         sample_nodes_acc={n: {t:sample_nodes_acc_base[n][t] for t in all_poi_types
                               } for n in range(len(sample_x))}

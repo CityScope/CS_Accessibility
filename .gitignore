@@ -1,5 +1,6 @@
 js/token.js
-*.csv
+*comb_network*
+*osm_ped_network*
 **/gtfsfeed_text/
 **/gtfsfeed_zips/
 **/logs/
