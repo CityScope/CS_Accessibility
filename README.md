@@ -4,3 +4,8 @@ Access to jobs, restaurants, education or any other amenity for which we have lo
 Accessibility can be calculated by walking only or by a combination of walking and public transit.
 
 This module makes use of the [urbanaccess](https://github.com/UDST/urbanaccess) and [pandana](https://github.com/UDST/pandana) modules of the [Urban Data Science Toolkit](https://github.com/UDST).
+To run, go to the root folder in terminal and type:
+```
+python python/access_service_nx.py [CITY]
+```
+where [CITY] is the name of one of the supported cities.
