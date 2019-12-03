@@ -29,10 +29,12 @@ if 'grasbrook' in table_name:
     else:
         META_GRID_SAMPLE_PATH='./python/'+city+'/data/meta_grid_sample_gb_comp.geojson'
         META_GRID_HEADER_SAMPLE_PATH='./python/'+city+'/data/meta_header_sample_gb_comp.geojson'
-if 'corktown' in table_name: 
+elif 'corktown' in table_name: 
     city='Detroit'
     META_GRID_SAMPLE_PATH='./python/'+city+'/data/meta_grid_sample_gb_comp.geojson'
     META_GRID_HEADER_SAMPLE_PATH='./python/'+city+'/data/meta_header_sample.geojson'
+else:
+    'Table name not recognised'
 
 configs=json.load(open('./python/configs.json'))
 city_configs=configs[city]
