@@ -6,6 +6,6 @@ Accessibility can be calculated by walking only or by a combination of walking a
 This module makes use of the [urbanaccess](https://github.com/UDST/urbanaccess) and [pandana](https://github.com/UDST/pandana) modules of the [Urban Data Science Toolkit](https://github.com/UDST).
 To run, go to the root folder in terminal and type:
 ```
-python python/access_service_nx.py [CITY]
+python python/access_service_nx.py [TABLE_NAME]
 ```
-where [CITY] is the name of one of the supported cities.
+where [TABLE_NAME] is the name of one of the cityscope tables on city I/O. eg. grasbrook

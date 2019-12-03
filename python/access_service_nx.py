@@ -18,25 +18,41 @@ from scipy import spatial
 import pyproj
 import sys
 
-city=sys.argv[1]
+table_name=sys.argv[1]
+
+# TODO: below is temporary solution to work for both MIT and HCU versions
+if 'grasbrook' in table_name: 
+    city='Hamburg'
+    if table_name=='grasbrook': 
+        META_GRID_SAMPLE_PATH='./python/'+city+'/data/meta_grid_sample.geojson'
+        META_GRID_HEADER_SAMPLE_PATH='./python/'+city+'/data/meta_header_sample.geojson'
+    else:
+        META_GRID_SAMPLE_PATH='./python/'+city+'/data/meta_grid_sample_gb_comp.geojson'
+        META_GRID_HEADER_SAMPLE_PATH='./python/'+city+'/data/meta_header_sample_gb_comp.geojson'
+if 'corktown' in table_name: 
+    city='Detroit'
+    META_GRID_SAMPLE_PATH='./python/'+city+'/data/meta_grid_sample_gb_comp.geojson'
+    META_GRID_HEADER_SAMPLE_PATH='./python/'+city+'/data/meta_header_sample.geojson'
 
 configs=json.load(open('./python/configs.json'))
 city_configs=configs[city]
 
-table_name=city_configs['table_name']
 host='https://cityio.media.mit.edu/'
 
-pois_per_lu={1: {'housing': 1000},
-                  2: {'housing': 2000},
-                  3: {'employment': 1000, 'groceries': 1/5},
-                  4: {'employment': 2000, 'food': 1}}
+simple_pois_per_lu={'street': {},
+                  'housing': {'housing': 1000},
+                  'housing2': {'housing': 2000},
+                  'working': {'employment': 1000, 'groceries': 1/5},
+                  'working_2': {'employment': 2000, 'food': 1},
+                  'green': {'green_space': 1}}
 RADIUS=20
 
 add_grid_roads=city_configs['add_grid_roads']
 
 CITYIO_SAMPLE_PATH='./python/'+city+'/data/sample_cityio_data.json'
-META_GRID_SAMPLE_PATH='./python/'+city+'/data/meta_grid.geojson'
-GRID_MAPPING_SAMPLE_PATH='./python/'+city+'/data/grid_mapping.geojson'
+
+GRID_MAPPING_SAMPLE_PATH='./python/'+city+'/data/grid_mapping.json'
+TYPE_MAPPING_SAMPLE_PATH='./python/'+city+'/data/type_mapping_sample.json'
 UA_NODES_PATH='./python/'+city+'/data/access_network_nodes.csv'
 UA_EDGES_PATH='./python/'+city+'/data/access_network_edges.csv'
 ZONES_PATH='python/'+city+'/data/model_area.geojson'
@@ -45,10 +61,10 @@ local_epsg = city_configs['local_epsg']
 projection=pyproj.Proj("+init=EPSG:"+local_epsg)
 wgs=pyproj.Proj("+init=EPSG:4326")
 
-cityIO_grid_url=host+'api/table/'+table_name
-cityIO_output_path=host+'api/table/update/'+table_name+'/'
-access_output_path=cityIO_output_path+'access'
-indicator_output_path=cityIO_output_path+'ind_access'
+cityIO_get_url=host+'api/table/'+table_name
+cityIO_post_url=host+'api/table/update/'+table_name+'/'
+access_post_url=cityIO_post_url+'access'
+indicator_post_url=cityIO_post_url+'ind_access'
 
 dummy_link_speed_met_min=2*1000/60
 
@@ -149,41 +165,81 @@ def createGridGraphs(meta_grid_xy, interactive_meta_cells, graph, nrows, ncols,
                           attr_dict={'weight_minutes':cell_size/dummy_link_speed_met_min})
     print(n_links_to_real_net)
     return graph 
+
+
+def create_lu_to_pois_map(lu_descriptions, all_poi_types):
+    pois_per_lu={}
+    for lu_code, description in enumerate(lu_descriptions):
+        if isinstance(description, str):
+            pois_per_lu[lu_code]=simple_pois_per_lu[description]
+        elif isinstance(description, dict):
+            print('Complex mapping')
+            this_poi_mapping={poi:0 for poi in all_poi_types}
+            if description['type']=='building':
+                # Ground Floor Use
+                if description["bld_useGround"]=="commercial":
+                    this_poi_mapping['food']= 1/2 
+                    this_poi_mapping['groceries']=1/4
+                    this_poi_mapping['nightlife']=1/10
+                    this_poi_mapping['shopping']=1/5
+                elif description["bld_useGround"]=="residential":
+                    this_poi_mapping['housing']+=50
+                elif description["bld_useGround"]=="office":
+                    this_poi_mapping['jobs']+=50
+                # Upper Floor Use
+                if description["bld_useUpper"]=="residential":
+                    this_poi_mapping['housing']+=50*description['bld_numLevels']
+                elif description["bld_useGround"]=="office":
+                    this_poi_mapping['jobs']+=50*description['bld_numLevels']
+            elif description['type']=='open_space':
+                if description['os_type']=='green_space':
+                    this_poi_mapping['green_space']+=1
+            elif description['type']=='empty':
+                pass
+            pois_per_lu[lu_code]=this_poi_mapping
+        else:
+            print('Unknown Mapping Type')
+    return pois_per_lu
+                 
 # =============================================================================
 
 # =============================================================================
 # Get the grid data
 # Interactive grid parameters
 try:
-    with urllib.request.urlopen(cityIO_grid_url+'/header/spatial') as url:
+    with urllib.request.urlopen(cityIO_get_url+'/header/spatial') as url:
     #get the latest grid data
         cityIO_spatial_data=json.loads(url.read().decode())
+    with urllib.request.urlopen(cityIO_get_url+'/header/mapping/type') as url:
+    #get the latest grid data
+        type_mapping=json.loads(url.read().decode())
 except:
-    print('Using static cityIO grid file')
+    print('Using static cityIO grid file for spatial parameters')
     cityIO_data=json.load(open(CITYIO_SAMPLE_PATH))
     cityIO_spatial_data=cityIO_data['header']['spatial']
+    type_mapping=json.load(open(TYPE_MAPPING_SAMPLE_PATH))
 n_cells=cityIO_spatial_data['ncols']*cityIO_spatial_data['nrows']
+
+
 
 # Full meta grid geojson      
 try:
-    with urllib.request.urlopen(cityIO_grid_url+'/meta_grid') as url:
-    #get the latest grid data
+    with urllib.request.urlopen(cityIO_get_url+'/meta_grid') as url:
+    #get the meta_grid from cityI/O
         meta_grid=json.loads(url.read().decode())
+    with urllib.request.urlopen(cityIO_get_url+'/meta_grid_header') as url:
+        meta_grid_header=json.loads(url.read().decode())
 except:
-    print('Using static cityIO grid file')
+    print('Using static meta_grid file for initialisation')
     meta_grid=json.load(open(META_GRID_SAMPLE_PATH))
+    meta_grid_header=json.load(open(META_GRID_HEADER_SAMPLE_PATH))
     
 # Interactive cell to meta_grid geojson      
 int_to_meta_grid={}
 for fi, f in enumerate(meta_grid['features']):
     if f['properties']['interactive']:
         int_to_meta_grid[int(f['properties']['interactive_id'])]=fi 
-        
-with urllib.request.urlopen(cityIO_grid_url+'/meta_grid_header') as url:
-#get the latest grid data
-    meta_grid_header=json.loads(url.read().decode())
-
-
+      
 meta_grid_ll=[meta_grid['features'][i][
         'geometry']['coordinates'][0][0
         ] for i in range(len(meta_grid['features']))]
@@ -202,6 +258,7 @@ grid_points_xy=[meta_grid_xy[int_to_meta_grid[int_grid_cell]]
 
 # =============================================================================
 # get all amenities in within bounding box of study area
+print('Getting OSM data')
 OSM_URL_ROOT='https://lz4.overpass-api.de/api/interpreter?data=[out:json][bbox];node[~"^(amenity|leisure|shop)$"~"."];out;&bbox='
 #
 
@@ -220,6 +277,7 @@ if city_configs['zonal_pois']:
 # =============================================================================
 # Create the transport network
 # Baseline network from urbanaccess results
+print('Building the base transport network')
 edges=pd.read_csv(UA_EDGES_PATH)
 nodes=pd.read_csv(UA_NODES_PATH)   
 
@@ -235,7 +293,9 @@ for i, row in edges.iterrows():
                      attr_dict={'weight_minutes':row['weight']})
   
 all_poi_types=[tag for tag in base_amenities]+city_configs['zonal_pois']
-pois_at_base_nodes={n: {t:0 for t in all_poi_types} for n in graph.nodes}             
+pois_at_base_nodes={n: {t:0 for t in all_poi_types} for n in graph.nodes} 
+
+print('Finding closest node to each base POI')            
 # associate each amenity with its closest node in the base network
 for tag in base_amenities:
     for ai in range(len(base_amenities[tag]['x'])):
@@ -254,6 +314,7 @@ if city_configs['zonal_pois']:
                 pois_at_base_nodes[nearest_node][poi_type]+=f['properties'][poi_type]
 
 # Add links for the new network defined by the interactive area  
+print('Adding dummy links for the grid network') 
 graph=createGridGraphs(meta_grid_xy, interactive_meta_cells, graph, meta_grid_header['nrows'], 
                        meta_grid_header['ncols'], cityIO_spatial_data['cellSize'], 
                        kdtree_base_nodes, 100)
@@ -262,11 +323,6 @@ graph=createGridGraphs(meta_grid_xy, interactive_meta_cells, graph, meta_grid_he
 
 # =============================================================================
 # Prepare the sample grid points for the output accessibility results
-# Sampling points should correspond to points on the full_table grid but extend 
-# further in the surrounding city
-#full_grid_lons=[f['geometry']['coordinates'][0][0][0] for f in meta_grid['features']]
-#full_grid_lats=[f['geometry']['coordinates'][0][0][1] for f in meta_grid['features']]
-#full_grid_x, full_grid_y= pyproj.transform(wgs, projection,full_grid_lons, full_grid_lats)
 col_margin_left=city_configs['sampling_grid']['col_margin_left']
 row_margin_top=city_configs['sampling_grid']['row_margin_top']
 cell_width=city_configs['sampling_grid']['cell_width']
@@ -285,6 +341,9 @@ sample_lons, sample_lats=pyproj.transform(projection,wgs, sample_x, sample_y)
 # include both baseline links and new links
 
 # first create new kdTree including the baseline nodes and the new grid nodes
+
+print('Baseline Accessibility') 
+
 all_nodes_ids, all_nodes_xy=[], []
 for ind_node in range(len(nodes_x)):
     all_nodes_ids.append(nodes.iloc[ind_node]['id_int'])
@@ -328,9 +387,9 @@ grid_geojson=create_access_geojson(sample_lons, sample_lats,
 avg_access={t: np.mean([sample_nodes_acc_base[g][t
                         ] for g in sample_nodes_acc_base]
             ) for t in sample_nodes_acc_base[0]}
-r = requests.post(access_output_path, data = json.dumps(grid_geojson))
+r = requests.post(access_post_url, data = json.dumps(grid_geojson))
 print('Base geojson: {}'.format(r))
-r = requests.post(indicator_output_path, data = json.dumps(avg_access))
+r = requests.post(indicator_post_url, data = json.dumps(avg_access))
 print('Base indicators: {}'.format(r))
 
 # =============================================================================
@@ -339,6 +398,7 @@ print('Base indicators: {}'.format(r))
 # Interactive Accessibility Analysis
 # instead of recomputing the isochrone for every sample point, we will reverse 
 # the graph and compute the isochrone around each new amenity
+print('Preparing for interactve updates') 
 rev_graph=graph.reverse()
 # find the sample nodes affected by each interactive grid cell
 affected_sample_nodes={}
@@ -351,22 +411,45 @@ for gi in range(len(grid_points_xy)):
 
 first_pass=True 
 lastId=0
+last_header_id=0
+mapping_data={}
+pois_per_lu=create_lu_to_pois_map(mapping_data, all_poi_types)
+print('Listening for grid updates') 
 while True:
-#check if grid data changed
+# =============================================================================
+#     check if type mapping changed
+# =============================================================================
     try:
-        with urllib.request.urlopen(cityIO_grid_url+'/meta/hashes/grid') as url:
+        with urllib.request.urlopen(cityIO_get_url+'/meta/hashes/header') as url:
+            header_hash_id=json.loads(url.read().decode())
+    except:
+        print('Cant access city_IO header hash')
+    if not header_hash_id==last_header_id:
+        print('Getting new header data')
+        try:
+            with urllib.request.urlopen(cityIO_get_url+'/header/mapping/type') as url:
+                mapping_data=json.loads(url.read().decode())
+                pois_per_lu=create_lu_to_pois_map(mapping_data, all_poi_types)
+            last_header_id=header_hash_id
+        except:
+            print('Cant access city_IO header data')    
+# =============================================================================
+#     check if grid data changed
+# =============================================================================
+    try:
+        with urllib.request.urlopen(cityIO_get_url+'/meta/hashes/grid') as url:
             hash_id=json.loads(url.read().decode())
     except:
-        print('Cant access cityIO')
+        print('Cant access city_IO grid hash')
         hash_id=1
     if hash_id==lastId:
         sleep(0.2)
     else:
         try:
-            with urllib.request.urlopen(cityIO_grid_url+'/grid') as url:
+            with urllib.request.urlopen(cityIO_get_url+'/grid') as url:
                 cityIO_grid_data=json.loads(url.read().decode())
         except:
-            print('Coudnt access city_IO')
+            print('Cant access city_IO grid data')
         lastId=hash_id
         sample_nodes_acc={n: {t:sample_nodes_acc_base[n][t] for t in all_poi_types
                               } for n in range(len(sample_x))}
@@ -396,9 +479,9 @@ while True:
             ) for t in sample_nodes_acc[0]}
         grid_geojson=create_access_geojson(sample_lons, sample_lats, 
                                            sample_nodes_acc, scalers)
-        r = requests.post(access_output_path, data = json.dumps(grid_geojson))
+        r = requests.post(access_post_url, data = json.dumps(grid_geojson))
         print('Geojson: {}'.format(r))
-        r = requests.post(indicator_output_path, data = json.dumps(avg_access))
+        r = requests.post(indicator_post_url, data = json.dumps(avg_access))
         print('Indicators: {}'.format(r))
         sleep(0.5) 
 

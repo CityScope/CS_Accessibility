@@ -1,0 +1,56 @@
+[{
+	"type": "empty"
+}, {
+	"str_bike": true,
+	"str_elevator": false,
+	"str_numLanes": 0,
+	"str_ramp": false,
+	"str_speed": 50,
+	"str_stairs": true,
+	"type": "street"
+}, {
+	"bld_numLevels": 14,
+	"bld_useGround": "commercial",
+	"bld_useUpper": "office",
+	"type": "building"
+}, {
+	"os_type": "green_space",
+	"type": "open_space"
+}, {
+	"str_bike": true,
+	"str_elevator": false,
+	"str_numLanes": 2,
+	"str_ramp": false,
+	"str_speed": 50,
+	"str_stairs": false,
+	"type": "street"
+}, {
+	"bld_numLevels": 19,
+	"bld_useGround": "residential",
+	"bld_useUpper": "residential",
+	"type": "building"
+}, {
+	"bld_numLevels": 30,
+	"bld_useGround": "commercial",
+	"bld_useUpper": "office",
+	"type": "building"
+}, {
+	"os_type": "water",
+	"type": "open_space"
+}, {
+	"str_bike": false,
+	"str_elevator": false,
+	"str_numLanes": 2,
+	"str_ramp": false,
+	"str_speed": 50,
+	"str_stairs": false,
+	"type": "street"
+}, {
+	"bld_numLevels": 34,
+	"bld_useGround": "office",
+	"bld_useUpper": "office",
+	"type": "building"
+}, {
+	"os_type": "playground",
+	"type": "open_space"
+}
