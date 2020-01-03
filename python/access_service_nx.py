@@ -149,23 +149,16 @@ def createGridGraphs(meta_grid_xy, interactive_meta_cells, graph, nrows, ncols,
                 if dist_to_closest<dist_thresh:
                     n_links_to_real_net+=1
                     closest_node_id=nodes.iloc[closest_ind]['id_int']
-                    graph.add_edge('g'+str(cell_num), closest_node_id, attr_dict={ 
-                            'weight_minutes':dist_to_closest/dummy_link_speed_met_min})
-                    graph.add_edge(closest_node_id, 'g'+str(cell_num), attr_dict={
-                            'weight_minutes':dist_to_closest/dummy_link_speed_met_min})                    
+                    graph.add_edge('g'+str(cell_num), closest_node_id, weight=dist_to_closest/dummy_link_speed_met_min)
+                    graph.add_edge(closest_node_id, 'g'+str(cell_num), weight=dist_to_closest/dummy_link_speed_met_min)                   
                 # if not at the end of a row, add h link
                 if not c==ncols-1:
-                    graph.add_edge('g'+str(r*ncols+c), 'g'+str(r*ncols+c+1), 
-                          attr_dict={'weight_minutes':cell_size/dummy_link_speed_met_min})
-                    graph.add_edge('g'+str(r*ncols+c+1), 'g'+str(r*ncols+c), 
-                          attr_dict={'weight_minutes':cell_size/dummy_link_speed_met_min})
+                    graph.add_edge('g'+str(r*ncols+c), 'g'+str(r*ncols+c+1), weight=cell_size/dummy_link_speed_met_min)
+                    graph.add_edge('g'+str(r*ncols+c+1), 'g'+str(r*ncols+c), weight=cell_size/dummy_link_speed_met_min)
                 # if not at the end of a column, add v link
                 if not r==nrows-1:
-                    graph.add_edge('g'+str(r*ncols+c), 'g'+str((r+1)*ncols+c), 
-                          attr_dict={'weight_minutes':cell_size/dummy_link_speed_met_min})
-                    graph.add_edge('g'+str((r+1)*ncols+c), 'g'+str(r*ncols+c), 
-                          attr_dict={'weight_minutes':cell_size/dummy_link_speed_met_min})
-    print(n_links_to_real_net)
+                    graph.add_edge('g'+str(r*ncols+c), 'g'+str((r+1)*ncols+c), weight=cell_size/dummy_link_speed_met_min)
+                    graph.add_edge('g'+str((r+1)*ncols+c), 'g'+str(r*ncols+c), weight=cell_size/dummy_link_speed_met_min)
     return graph 
 
 
@@ -291,8 +284,7 @@ kdtree_base_nodes=spatial.KDTree(np.column_stack((nodes_x, nodes_y)))
 
 graph=nx.DiGraph()
 for i, row in edges.iterrows():
-    graph.add_edge(row['from_int'], row['to_int'], 
-                     attr_dict={'weight_minutes':row['weight']})
+    graph.add_edge(row['from_int'], row['to_int'], weight=row['weight'])
   
 all_poi_types=[tag for tag in base_amenities]+city_configs['zonal_pois']
 pois_at_base_nodes={n: {t:0 for t in all_poi_types} for n in graph.nodes} 
@@ -367,8 +359,7 @@ for p in range(len(sample_x)):
     for candidate in zip(distance_to_closest, closest_nodes):
         if candidate[0]<MAX_DIST_VIRTUAL:
             close_node_id=all_nodes_ids[candidate[1]]
-            graph.add_edge('s'+str(p), close_node_id, 
-                     attr_dict={'weight_minutes':candidate[0]/(dummy_link_speed_met_min)})
+            graph.add_edge('s'+str(p), close_node_id, weight=candidate[0]/(dummy_link_speed_met_min))
 
 
 # for each sample node, create an isochrone and count the amenities of each type        
