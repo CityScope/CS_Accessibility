@@ -1,4 +1,54 @@
 {
+  "Aalto": {
+    
+    "bboxes": {
+      "all_zones": [
+        24.78,
+        60.17,
+        24.85,
+        60.2
+      ],
+      "amenities": [
+        24.78,
+        60.17,
+        24.85,
+        60.2
+      ]
+    },
+    "zonal_pois": ["housing", "parking"],
+    "osm_pois": {
+      "food": [
+        "amenity_restaurant",
+        "amenity_cafe",
+        "amenity_fast_food",
+        "amenity_pub"
+      ],
+      "nightlife": [
+        "amenity_bar",
+        "amenity_pub",
+        "amenity_nightclub",
+        "amenity_biergarten"
+      ],
+      "groceries": [
+        "shop_convenience",
+        "shop_grocer",
+        "shop_greengrocer",
+        "shop_food",
+        "shop_supermarket"
+      ]
+    },
+    "local_epsg": "3047",
+    "sampling_grid": {
+      "col_margin_left": 50,
+      "row_margin_top": 50,
+      "cell_width": 128,
+      "cell_height": 128,
+      "stride": 4
+    },
+    "table_name": "aalto_02",
+    "add_grid_roads":false
+  },
+
   "Hamburg": {
     "feed_dicts": {
       "main": "http://daten.transparenz.hamburg.de/Dataport.HmbTG.ZS.Webservice.GetRessource100/GetRessource100.svc/0c0e35e2-8d5d-4211-af49-ee3a4e6c31db/Upload__HVV_Rohdaten_GTFS_Fpl_20191112.zip"

@@ -33,6 +33,10 @@ elif 'corktown' in table_name:
     city='Detroit'
     META_GRID_SAMPLE_PATH='./python/'+city+'/data/meta_grid_sample_gb_comp.geojson'
     META_GRID_HEADER_SAMPLE_PATH='./python/'+city+'/data/meta_header_sample.geojson'
+elif 'aalto' in table_name: 
+    city='Aalto'
+    META_GRID_SAMPLE_PATH='./python/'+city+'/data/meta_grid_sample_gb_comp.geojson'
+    META_GRID_HEADER_SAMPLE_PATH='./python/'+city+'/data/meta_header_sample.geojson'
 else:
     'Table name not recognised'
 
@@ -46,7 +50,8 @@ simple_pois_per_lu={'street': {},
                   'housing2': {'housing': 2000},
                   'working': {'employment': 1000, 'groceries': 1/5},
                   'working_2': {'employment': 2000, 'food': 1},
-                  'green': {'green_space': 1}}
+                  'green': {'green_space': 1},
+                  'parking': {'parking': 100}}
 RADIUS=20
 
 add_grid_roads=city_configs['add_grid_roads']
@@ -305,7 +310,8 @@ if city_configs['zonal_pois']:
         nearest_node=nodes.iloc[nearest_node_ind]['id_int']
         if distance<1000: #(because some zones are outside the network area)
             for poi_type in city_configs['zonal_pois']:
-                pois_at_base_nodes[nearest_node][poi_type]+=f['properties'][poi_type]
+                if poi_type in f['properties']:
+                    pois_at_base_nodes[nearest_node][poi_type]+=f['properties'][poi_type]
 
 # Add links for the new network defined by the interactive area  
 print('Adding dummy links for the grid network') 

@@ -5,7 +5,7 @@ map = new mapboxgl.Map({
       container: 'map', // container id
       style: 'mapbox://styles/mapbox/dark-v9',
       // center: [ 10, 53.5], // starting position [lng, lat]
-      center: [ -83.072019, 42.326864],
+      center: [ 24.5, 60],
       // center: [0,0],
       zoom: 8 ,// starting zoom
       pitch: 0
@@ -13,7 +13,7 @@ map = new mapboxgl.Map({
 
 map.on('load', function(){ 
   // d3.json("./python/Boston/output_geojson.geojson", function(data) {
-    d3.json("https://cityio.media.mit.edu/api/table/corktown/access", function(data) {
+    d3.json("https://cityio.media.mit.edu/api/table/aalto_02/access", function(data) {
     console.log(data);
     makeMap(data);
   });
